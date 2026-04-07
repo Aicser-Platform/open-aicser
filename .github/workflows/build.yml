@@ -1,0 +1,51 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-ce:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        # No submodules — CE build skips them entirely
+
+      - name: Build CE server image
+        run: |
+          docker build \
+            --build-arg EDITION=CE \
+            -t ghcr.io/aicser-platform/open-aicser-server:ce-${{ github.sha }} \
+            ./server
+
+      - name: Build CE client image
+        run: |
+          docker build \
+            --build-arg EDITION=CE \
+            -t ghcr.io/aicser-platform/open-aicser-client:ce-${{ github.sha }} \
+            ./client
+
+  build-ee:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.EE_SUBMODULE_TOKEN }}
+          # GitHub PAT with read access to both private EE repos
+
+      - name: Build EE server image
+        run: |
+          docker build \
+            --build-arg EDITION=EE \
+            -t ghcr.io/aicser-platform/open-aicser-server:ee-${{ github.sha }} \
+            ./server
+
+      - name: Build EE client image
+        run: |
+          docker build \
+            --build-arg EDITION=EE \
+            -t ghcr.io/aicser-platform/open-aicser-client:ee-${{ github.sha }} \
+            ./client

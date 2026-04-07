@@ -1,0 +1,7 @@
+# EE submodule pointers — only EE team can merge changes
+server/app/ee/   @Aicser-Platform/ee-team
+client/src/ee/   @Aicser-Platform/ee-team
+.gitmodules      @Aicser-Platform/ee-team
+
+# Licensing module in CE — only core team
+server/app/modules/licensing/  @Aicser-Platform/core-team

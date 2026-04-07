@@ -1,0 +1,7 @@
+[submodule "server/app/ee"]
+	path = server/app/ee
+	url = git@github.com:Aicser-Platform/open-aicser-ee-server.git
+
+[submodule "client/src/ee"]
+	path = client/src/ee
+	url = git@github.com:Aicser-Platform/open-aicser-ee-client.git

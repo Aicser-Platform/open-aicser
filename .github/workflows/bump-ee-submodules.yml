@@ -1,0 +1,27 @@
+name: Bump EE Submodules
+
+on:
+  repository_dispatch:
+    types: [ee-server-updated, ee-client-updated]
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.EE_SUBMODULE_TOKEN }}
+
+      - name: Pull latest EE submodules
+        run: |
+          git submodule update --remote server/app/ee
+          git submodule update --remote client/src/ee
+
+      - name: Commit submodule pointer bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add server/app/ee client/src/ee
+          git diff --staged --quiet || git commit -m "chore: bump EE submodules [skip ci]"
+          git push
