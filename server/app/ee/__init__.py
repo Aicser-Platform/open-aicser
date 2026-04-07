@@ -2,4 +2,5 @@
 SsoRouter = None
 AuditLogRouter = None
 LicensingRouter = None
+RbacRouter = None
 RbacMiddleware = None
