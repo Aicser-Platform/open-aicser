@@ -155,7 +155,7 @@ this file, exporting real router and middleware objects.
 ```python
 def include_ee_routers(app: FastAPI) -> None:
     if os.environ.get("EDITION", "CE") != "EE":
-        return                            # CE: skip entirely
+        return                            # CE:skip entirely
     from app.ee import SsoRouter, AuditLogRouter, LicensingRouter, RbacRouter, RbacMiddleware
     for router in [SsoRouter, AuditLogRouter, LicensingRouter, RbacRouter]:
         if router is not None:            # guards against the CE stub
