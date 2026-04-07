@@ -11,11 +11,12 @@ how the codebase works at runtime, and how to contribute as a CE developer.
 2. [How the Three Repos Connect](#2-how-the-three-repos-connect)
 3. [The Fallback Pattern](#3-the-fallback-pattern)
 4. [Runtime Behaviour: CE vs EE](#4-runtime-behaviour-ce-vs-ee)
-5. [CI/CD Pipeline](#5-cicd-pipeline)
-6. [Local Development (CE contributor)](#6-local-development-ce-contributor)
-7. [Environment Variables](#7-environment-variables)
-8. [Adding Features](#8-adding-a-new-ce-feature)
-9. [EE Access and the 404 on Submodule Links](#9-ee-access-and-the-404-on-submodule-links)
+5. [How EE Features Are Hidden from CE](#5-how-ee-features-are-hidden-from-ce)
+6. [CI/CD Pipeline](#6-cicd-pipeline)
+7. [Local Development (CE contributor)](#7-local-development-ce-contributor)
+8. [Environment Variables](#8-environment-variables)
+9. [Adding Features](#9-adding-features)
+10. [EE Access and the 404 on Submodule Links](#10-ee-access-and-the-404-on-submodule-links)
 
 ---
 
@@ -272,7 +273,90 @@ required permission for that route. Admins bypass RBAC checks entirely.
 
 ---
 
-## 5. CI/CD Pipeline
+## 5. How EE Features Are Hidden from CE
+
+EE features are hidden at two independent layers — backend and frontend. Both
+must be in place for a feature to be truly EE-only.
+
+### Backend hiding
+
+EE API routes live exclusively in `open-aicser-ee-server`. The CE server never
+registers them because `main.py` short-circuits on edition and catches import
+failures:
+
+```python
+def include_ee_routers(app: FastAPI) -> None:
+    if os.environ.get("EDITION", "CE") != "EE":
+        return                          # CE: exits before any EE import
+    try:
+        from app.ee import YourNewRouter
+        app.include_router(YourNewRouter)
+    except ImportError:
+        return                          # EE submodule absent: safe no-op
+```
+
+A CE user hitting `/your-ee-route` receives **404** — the route does not exist
+in the CE process. There is no authentication check involved; the path is simply
+unregistered.
+
+### Frontend hiding
+
+Three mechanisms work together:
+
+**1. Source code stays in the EE repo**
+
+The component is implemented only in `open-aicser-ee-client`. In a CE build,
+`@/ee` is aliased by webpack to `src/ee-fallback.ts`, which exports `() => null`
+for every EE component name. The CE bundle contains no EE logic.
+
+**2. Page-level redirect guard**
+
+Every EE-only page in the CE repo starts with:
+
+```typescript
+const isEE = process.env.NEXT_PUBLIC_EDITION === 'EE';
+
+export default function YourEEPage() {
+  if (!isEE) redirect('/dashboard');   // CE users never see this page
+  return <YourEEComponent />;
+}
+```
+
+`NEXT_PUBLIC_EDITION` is baked in at build time (`CE` or `EE`), so in a CE
+build the redirect is unconditional and the component import is tree-shaken away.
+
+**3. Nav link only in EE**
+
+The link to the page is added only to `EE_LINKS` in `Navbar.tsx`, so CE users
+have no visible entry point to the page.
+
+### What CE users see vs EE users
+
+| Layer | CE | EE |
+|-------|----|----|
+| API route | 404 (not registered) | Real response |
+| Nav link | Not rendered | Visible |
+| Page URL (direct access) | Redirect to `/dashboard` | Renders component |
+| Component source in bundle | `() => null` stub | Real implementation |
+
+### EE components importing CE code
+
+EE components can freely use CE utilities, the axios client, and CE UI components
+via relative imports — they are mounted one level inside `src/`:
+
+```typescript
+// open-aicser-ee-client/your-feature/YourFeature.tsx
+import apiClient from '../../lib/axios';           // CE axios instance
+import { Button } from '../../components/ui/button'; // CE component
+import { useAuthStore } from '../../store/auth.store'; // CE zustand store
+```
+
+EE repos **must not** create their own copies of `apiClient`, zustand stores, or
+shared UI components. They inherit everything from CE via these relative paths.
+
+---
+
+## 6. CI/CD Pipeline
 
 Two GitHub Actions workflows run on every push/PR to `main`.
 
@@ -328,7 +412,7 @@ automatically. No manual pointer updates needed.
 
 ---
 
-## 6. Local Development (CE contributor)
+## 7. Local Development (CE contributor)
 
 You do **not** need access to the EE repos to contribute to CE.
 
@@ -433,7 +517,7 @@ Client starts at `http://localhost:3000`.
 
 ---
 
-## 7. Environment Variables
+## 8. Environment Variables
 
 ### `server/.env`
 
@@ -459,7 +543,7 @@ Client starts at `http://localhost:3000`.
 
 ---
 
-## 8. Adding a New CE Feature
+## 9. Adding Features
 
 CE features live in `server/app/modules/` (backend) and `client/src/` (frontend).
 They are available in both CE and EE builds.
@@ -498,7 +582,23 @@ The `<Navbar>` renders automatically on every page (except `/login` and
 
 There are three steps:
 
-**1. Add a component export to the EE client submodule** (`open-aicser-ee-client`):
+**1. Add a service + component to the EE client submodule** (`open-aicser-ee-client`):
+
+Follow the same service layer pattern as CE — keep API calls in a service file,
+keep the component focused on rendering. The service imports `apiClient` from the
+CE repo via relative path. Do **not** create a new axios instance or zustand store.
+
+```typescript
+// open-aicser-ee-client/widgets/widgets.service.ts
+import apiClient from '../../lib/axios';     // CE axios — do not duplicate
+
+export const widgetsService = {
+  list: () => apiClient.get('/widgets/').then(r => r.data),
+  create: (data: unknown) => apiClient.post('/widgets/', data).then(r => r.data),
+};
+```
+
+Then implement the component:
 
 ```typescript
 // open-aicser-ee-client/widgets/WidgetsPage.tsx
@@ -574,7 +674,7 @@ directly to `/widgets` are sent back to the dashboard.
 
 ---
 
-## 9. EE Access and the 404 on Submodule Links
+## 10. EE Access and the 404 on Submodule Links
 
 On GitHub, the `server/app/ee` and `client/src/ee` folders appear as linked
 submodule entries. Clicking them navigates to the private EE repo URL.
