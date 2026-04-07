@@ -14,7 +14,7 @@ how the codebase works at runtime, and how to contribute as a CE developer.
 5. [CI/CD Pipeline](#5-cicd-pipeline)
 6. [Local Development (CE contributor)](#6-local-development-ce-contributor)
 7. [Environment Variables](#7-environment-variables)
-8. [Adding a New CE Feature](#8-adding-a-new-ce-feature)
+8. [Adding Features](#8-adding-a-new-ce-feature)
 9. [EE Access and the 404 on Submodule Links](#9-ee-access-and-the-404-on-submodule-links)
 
 ---
@@ -133,44 +133,48 @@ Two levels up (`../../`) = `sso/` → `ee/` → `src/`.
 This is the key mechanism that allows the CE repo to build and run without
 the EE submodule being present.
 
-### Server fallback (`server/app/ee/__init__.py`)
+### Server fallback (`try/except ImportError`)
 
-When the EE submodule is **absent**, the CE repo contains its own stub at
-`server/app/ee/__init__.py`:
-
-```python
-# CE fallback — EE submodule replaces this with real modules
-SsoRouter     = None
-AuditLogRouter = None
-LicensingRouter = None
-RbacRouter    = None
-RbacMiddleware = None
-```
-
-When the EE submodule **is present**, the submodule's own `__init__.py` replaces
-this file, exporting real router and middleware objects.
-
-`server/app/main.py` handles both cases safely:
+When the EE submodule is **absent**, `server/app/ee/` is an empty directory —
+there is no `__init__.py`, so `import app.ee` raises `ImportError`.
+`server/app/main.py` catches this safely:
 
 ```python
 def include_ee_routers(app: FastAPI) -> None:
     if os.environ.get("EDITION", "CE") != "EE":
-        return                            # CE:skip entirely
-    from app.ee import SsoRouter, AuditLogRouter, LicensingRouter, RbacRouter, RbacMiddleware
+        return                            # CE: skip entirely
+    try:
+        from app.ee import SsoRouter, AuditLogRouter, LicensingRouter, RbacRouter, RbacMiddleware
+    except ImportError:
+        return                            # EE submodule not checked out
     for router in [SsoRouter, AuditLogRouter, LicensingRouter, RbacRouter]:
-        if router is not None:            # guards against the CE stub
+        if router is not None:
             app.include_router(router)
     if RbacMiddleware is not None:
         app.add_middleware(RbacMiddleware)
 ```
 
-### Client fallback (`client/src/ee/index.ts`)
+When the EE submodule **is present**, the import succeeds and all EE routers
+and middleware are registered.
 
-The same pattern applies on the frontend. When the EE submodule is absent,
-the CE repo provides:
+### Client fallback (`client/src/ee-fallback.ts`)
+
+When the EE submodule is absent, `client/src/ee/` is an empty directory.
+`next.config.mjs` detects this at build time and aliases `@/ee` to the
+fallback file:
+
+```js
+// next.config.mjs
+const eeIndex    = path.resolve(__dirname, 'src/ee/index.ts');
+const eeFallback = path.resolve(__dirname, 'src/ee-fallback.ts');
+const eeEntry    = existsSync(eeIndex) ? path.dirname(eeIndex) : eeFallback;
+// webpack: config.resolve.alias['@/ee'] = eeEntry
+```
+
+`src/ee-fallback.ts` exports null stubs with the same names as the real EE
+components so all imports resolve without errors:
 
 ```typescript
-// CE fallback — EE submodule replaces this with real components
 export const SsoSettings  = () => null;
 export const AuditLogPage = () => null;
 export const RbacManager  = () => null;
@@ -238,8 +242,27 @@ if the EE submodule is absent.
 | `/` Home | ✓ | ✓ |
 | `/login` | ✓ | ✓ |
 | `/register` | ✓ | ✓ |
-| `/dashboard` | ✓ profile only | ✓ profile + SSO settings + Audit log |
-| `/settings` | ✓ (SSO panel hidden) | ✓ SSO configuration panel |
+| `/dashboard` | ✓ profile | ✓ profile |
+| `/settings` | ✓ (SSO panel hidden) | ✓ + SSO configuration panel |
+| `/audit-log` | redirects to `/dashboard` | ✓ `<AuditLogPage />` from EE submodule |
+| `/rbac` | redirects to `/dashboard` | ✓ `<RbacManager />` from EE submodule |
+| `/billing` | redirects to `/dashboard` | ✓ `<BillingPage />` from EE submodule |
+
+### Navigation bar
+
+Every authenticated page renders a `<Navbar>` component (via `NavbarWrapper` in
+the root layout). The nav links shown depend on the edition:
+
+**CE nav:** Dashboard · Settings  
+**EE nav:** Dashboard · Audit Log · Roles & Permissions · Billing · Settings
+
+The edition badge next to the app name changes colour — grey `CE` or purple `EE`.
+The navbar is hidden on `/login` and `/register`.
+
+Key files:
+- `client/src/components/Navbar.tsx` — link lists, edition badge, logout button
+- `client/src/components/NavbarWrapper.tsx` — reads the current pathname and
+  suppresses the navbar on auth pages; imported by `app/layout.tsx`
 
 ### Middleware
 
@@ -316,58 +339,89 @@ git clone https://github.com/Aicser-Platform/open-aicser.git
 cd open-aicser
 ```
 
-Do not run `git submodule update`. The CE fallback stubs at
-`server/app/ee/__init__.py` and `client/src/ee/index.ts` already provide
-everything CE needs.
+Do not run `git submodule update`. When the EE submodule is absent, the server
+uses `try/except ImportError` and the client falls back to `src/ee-fallback.ts`
+— everything CE needs is already in place.
 
-### Backend setup
+### Option A — Docker (recommended)
+
+The fastest way to get everything running together. Requires Docker Desktop or
+Docker Engine with the Compose plugin.
+
+**CE:**
+```bash
+cd deploy
+docker compose -f docker-compose.dev.yml up
+```
+
+**EE** (requires EE submodule checked out):
+```bash
+cd deploy
+EDITION=EE docker compose -f docker-compose.dev.yml up
+```
+
+Services:
+| Service | URL |
+|---------|-----|
+| Client (Next.js) | http://localhost:3000 |
+| Server (FastAPI) | http://localhost:8000 |
+| API docs | http://localhost:8000/docs |
+| PostgreSQL | localhost:5432 |
+
+The first run installs all dependencies into named Docker volumes — subsequent
+runs start in seconds. Source code is mounted as a volume so changes hot-reload
+without restarting containers.
+
+**Useful commands:**
+```bash
+# Rebuild after changing requirements.txt or package.json
+docker compose -f docker-compose.dev.yml up --build
+
+# Run in background
+docker compose -f docker-compose.dev.yml up -d
+
+# View logs
+docker compose -f docker-compose.dev.yml logs -f server
+docker compose -f docker-compose.dev.yml logs -f client
+
+# Stop everything
+docker compose -f docker-compose.dev.yml down
+
+# Stop and delete volumes (resets deps cache and database)
+docker compose -f docker-compose.dev.yml down -v
+```
+
+### Option B — Run services manually (no Docker)
+
+Use this if you prefer running processes directly on your machine.
+
+**Backend** (requires Python 3.12+):
 
 ```bash
 cd server
 
-# Copy env file and fill in SECRET_KEY
+# Copy env and fill in SECRET_KEY
 cp .env.example .env
 
-# Install dependencies (requires Python 3.12+)
 pip install -r requirements.txt
-
-# Run the dev server
 uvicorn app.main:app --reload
 ```
 
-The server starts at `http://localhost:8000`.
-Interactive API docs are at `http://localhost:8000/docs`.
+Server starts at `http://localhost:8000`. SQLite is used by default — no
+database setup required.
 
-SQLite is used by default — no database setup required.
-
-### Frontend setup
+**Frontend** (requires Node.js 20+):
 
 ```bash
 cd client
 
-# Copy env file (defaults work for local dev)
-cp .env.example .env.local
+cp .env.example .env.local   # defaults work for local dev
 
-# Install dependencies
 npm install
-
-# Run the dev server
 npm run dev
 ```
 
-The client starts at `http://localhost:3000`.
-
-### Docker (both services together)
-
-```bash
-cd deploy
-docker compose -f docker-compose.ce.yml up --build
-```
-
-This starts:
-- PostgreSQL on port `5432`
-- FastAPI server on port `8000`
-- Next.js client on port `3000`
+Client starts at `http://localhost:3000`.
 
 ### Verifying CE works
 
@@ -431,11 +485,82 @@ from app.modules.widgets.router import router as widgets_router
 app.include_router(widgets_router, prefix="/widgets", tags=["widgets"])
 ```
 
-### Example: adding a new frontend page
+### Example: adding a new CE frontend page
 
 Create `client/src/app/widgets/page.tsx`. If the page requires authentication,
 redirect to `/login` when no token is found (see `dashboard/page.tsx` for the
 pattern).
+
+The `<Navbar>` renders automatically on every page (except `/login` and
+`/register`) via `NavbarWrapper` in the root layout — no extra wiring needed.
+
+### Example: adding a new EE-only frontend page
+
+There are three steps:
+
+**1. Add a component export to the EE client submodule** (`open-aicser-ee-client`):
+
+```typescript
+// open-aicser-ee-client/widgets/WidgetsPage.tsx
+export function WidgetsPage() {
+  return <div>Widgets — EE feature</div>;
+}
+```
+
+Export it from the submodule's index:
+
+```typescript
+// open-aicser-ee-client/index.ts
+export { WidgetsPage } from './widgets/WidgetsPage';
+```
+
+**2. Add a null stub to `client/src/ee-fallback.ts`** (CE repo):
+
+```typescript
+export const WidgetsPage = () => null;
+```
+
+**3. Create the page in the CE repo** and add it to the nav:
+
+```typescript
+// client/src/app/widgets/page.tsx
+'use client';
+
+import { redirect } from 'next/navigation';
+import { WidgetsPage } from '@/ee';
+
+const isEE = process.env.NEXT_PUBLIC_EDITION === 'EE';
+
+export default function WidgetsRoute() {
+  if (!isEE) redirect('/dashboard');
+  return (
+    <div className="p-8">
+      <div className="mx-auto max-w-4xl">
+        <h1 className="text-2xl font-bold mb-6">Widgets</h1>
+        <div className="rounded-lg bg-white p-6 shadow-sm">
+          <WidgetsPage />
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+Then add the link to the `EE_LINKS` array in `client/src/components/Navbar.tsx`:
+
+```typescript
+const EE_LINKS = [
+  { href: '/dashboard',  label: 'Dashboard' },
+  { href: '/audit-log',  label: 'Audit Log' },
+  { href: '/rbac',       label: 'Roles & Permissions' },
+  { href: '/billing',    label: 'Billing' },
+  { href: '/widgets',    label: 'Widgets' },   // ← new
+  { href: '/settings',   label: 'Settings' },
+];
+```
+
+The `if (!isEE) redirect('/dashboard')` guard ensures CE users who navigate
+directly to `/widgets` are sent back to the dashboard.
 
 ### Rules for CE code
 
@@ -443,8 +568,8 @@ pattern).
   pattern (a runtime `EDITION` check with the import inside the function body)
   if a CE module needs to optionally call an EE service.
 - **Never import from `@/ee`** in a way that would fail when the submodule is
-  absent. The CE `ee/index.ts` fallback exports all the same names, so standard
-  imports are safe as long as you guard rendering with `isEE`.
+  absent. `ee-fallback.ts` exports all the same names as the real EE package,
+  so standard imports are safe as long as you guard rendering with `isEE`.
 - Keep CE features self-contained. EE features extend CE, not the other way around.
 
 ---

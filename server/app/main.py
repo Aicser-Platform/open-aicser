@@ -1,5 +1,6 @@
 import os
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from app.db import engine, Base
 from app.modules.auth.router import router as auth_router
 from app.modules.users.router import router as users_router
@@ -7,6 +8,14 @@ from app.modules.apps.router import router as apps_router
 import app.modules.users.model  # noqa: F401 — registers User with Base
 
 app = FastAPI(title="Open Aicser")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=os.environ.get("CORS_ORIGINS", "http://localhost:3000").split(","),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.on_event("startup")

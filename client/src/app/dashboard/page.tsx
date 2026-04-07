@@ -1,77 +1,50 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { getMe } from '@/lib/api';
-import { clearToken, isAuthenticated } from '@/lib/auth';
-import { SsoSettings } from '@/ee';
-import { AuditLogPage } from '@/ee';
-
-const isEE = process.env.NEXT_PUBLIC_EDITION === 'EE';
-
-type User = { id: number; email: string; full_name: string; is_admin: boolean };
+import { useAuthStore } from '@/store/auth.store';
+import { useUserStore } from '@/store/user.store';
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
-  const [error, setError] = useState('');
+  const { token } = useAuthStore();
+  const { me, loading, error, fetchMe, clearMe } = useUserStore();
 
   useEffect(() => {
-    if (!isAuthenticated()) {
+    if (!token) {
       router.push('/login');
       return;
     }
-    getMe()
-      .then(setUser)
-      .catch(() => {
-        clearToken();
-        router.push('/login');
-      });
-  }, [router]);
+    fetchMe().catch(() => {
+      clearMe();
+      router.push('/login');
+    });
+  }, [token, router, fetchMe, clearMe]);
 
-  function handleLogout() {
-    clearToken();
-    router.push('/login');
-  }
-
+  if (loading || !me) return <p className="p-8 text-gray-500">Loading…</p>;
   if (error) return <p className="p-8 text-red-600">{error}</p>;
-  if (!user) return <p className="p-8 text-gray-500">Loading…</p>;
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
+    <div className="p-8">
       <div className="mx-auto max-w-2xl">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">Dashboard</h1>
-            <p className="text-sm text-gray-500">
-              Edition: <span className="font-medium">{process.env.NEXT_PUBLIC_EDITION ?? 'CE'}</span>
-            </p>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-100"
-          >
-            Logout
-          </button>
-        </div>
-
-        <div className="rounded-lg bg-white p-6 shadow-sm mb-6">
-          <h2 className="text-lg font-semibold mb-2">Profile</h2>
-          <p><span className="text-gray-500">Name:</span> {user.full_name || '—'}</p>
-          <p><span className="text-gray-500">Email:</span> {user.email}</p>
-          <p><span className="text-gray-500">Admin:</span> {user.is_admin ? 'Yes' : 'No'}</p>
-        </div>
-
-        {isEE && (
-          <>
-            <div className="rounded-lg bg-white p-6 shadow-sm mb-6">
-              <SsoSettings />
+        <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
+        <div className="rounded-lg bg-white p-6 shadow-sm">
+          <h2 className="text-lg font-semibold mb-4">Profile</h2>
+          <dl className="space-y-2 text-sm">
+            <div className="flex gap-2">
+              <dt className="text-gray-500 w-16">Name</dt>
+              <dd>{me.full_name || '—'}</dd>
             </div>
-            <div className="rounded-lg bg-white p-6 shadow-sm">
-              <AuditLogPage />
+            <div className="flex gap-2">
+              <dt className="text-gray-500 w-16">Email</dt>
+              <dd>{me.email}</dd>
             </div>
-          </>
-        )}
+            <div className="flex gap-2">
+              <dt className="text-gray-500 w-16">Admin</dt>
+              <dd>{me.is_admin ? 'Yes' : 'No'}</dd>
+            </div>
+          </dl>
+        </div>
       </div>
     </div>
   );
