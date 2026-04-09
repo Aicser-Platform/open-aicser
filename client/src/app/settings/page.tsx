@@ -15,7 +15,6 @@ export default function SettingsPage() {
         </div>
         {isEE && (
           <div className="rounded-lg bg-white p-6 shadow-sm">
-            <h2 className="text-lg font-semibold mb-4">SSO Configuration</h2>
             <SsoSettings />
           </div>
         )}
