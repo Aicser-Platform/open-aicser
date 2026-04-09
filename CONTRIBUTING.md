@@ -121,8 +121,8 @@ use relative paths to reach shared CE code:
 // Inside open-aicser-ee-client/sso/SsoSettings.tsx
 // Mounted at: client/src/ee/sso/SsoSettings.tsx
 
-import { apiFetch } from '../../lib/api';        // → src/lib/api.ts
-import { Button } from '../../components/ui/button'; // → src/components/ui/button.tsx
+import apiClient from "../../lib/axios"; // → src/lib/axios.ts
+import { Button } from "../../components/ui/button"; // → src/components/ui/button.tsx
 ```
 
 Two levels up (`../../`) = `sso/` → `ee/` → `src/`.
@@ -166,9 +166,9 @@ fallback file:
 
 ```js
 // next.config.mjs
-const eeIndex    = path.resolve(__dirname, 'src/ee/index.ts');
-const eeFallback = path.resolve(__dirname, 'src/ee-fallback.ts');
-const eeEntry    = existsSync(eeIndex) ? path.dirname(eeIndex) : eeFallback;
+const eeIndex = path.resolve(__dirname, "src/ee/index.ts");
+const eeFallback = path.resolve(__dirname, "src/ee-fallback.ts");
+const eeEntry = existsSync(eeIndex) ? path.dirname(eeIndex) : eeFallback;
 // webpack: config.resolve.alias['@/ee'] = eeEntry
 ```
 
@@ -176,10 +176,10 @@ const eeEntry    = existsSync(eeIndex) ? path.dirname(eeIndex) : eeFallback;
 components so all imports resolve without errors:
 
 ```typescript
-export const SsoSettings  = () => null;
+export const SsoSettings = () => null;
 export const AuditLogPage = () => null;
-export const RbacManager  = () => null;
-export const BillingPage  = () => null;
+export const RbacManager = () => null;
+export const BillingPage = () => null;
 ```
 
 CE pages import from `@/ee` normally. The component just renders nothing in CE:
@@ -222,32 +222,32 @@ if the EE submodule is absent.
 
 ### API routes
 
-| Route | CE | EE |
-|-------|----|----|
-| `POST /auth/login` | ✓ returns JWT | ✓ + writes audit event |
-| `POST /auth/logout` | ✓ | ✓ + writes audit event |
-| `POST /users/` | ✓ register | ✓ register |
-| `GET /users/me` | ✓ | ✓ |
-| `GET /audit-log/` | — not available | ✓ admin-only |
-| `GET /licensing/status` | — not available | ✓ |
-| `POST /licensing/activate` | — not available | ✓ admin-only |
-| `GET /sso/providers` | — not available | ✓ |
-| `POST /sso/providers` | — not available | ✓ admin-only |
-| `GET /rbac/roles` | — not available | ✓ |
-| `POST /rbac/users/{id}/roles` | — not available | ✓ admin-only |
+| Route                         | CE              | EE                     |
+| ----------------------------- | --------------- | ---------------------- |
+| `POST /auth/login`            | ✓ returns JWT   | ✓ + writes audit event |
+| `POST /auth/logout`           | ✓               | ✓ + writes audit event |
+| `POST /users/`                | ✓ register      | ✓ register             |
+| `GET /users/me`               | ✓               | ✓                      |
+| `GET /audit-log/`             | — not available | ✓ admin-only           |
+| `GET /licensing/status`       | — not available | ✓                      |
+| `POST /licensing/activate`    | — not available | ✓ admin-only           |
+| `GET /sso/providers`          | — not available | ✓                      |
+| `POST /sso/providers`         | — not available | ✓ admin-only           |
+| `GET /rbac/roles`             | — not available | ✓                      |
+| `POST /rbac/users/{id}/roles` | — not available | ✓ admin-only           |
 
 ### Frontend pages
 
-| Page | CE | EE |
-|------|----|----|
-| `/` Home | ✓ | ✓ |
-| `/login` | ✓ | ✓ |
-| `/register` | ✓ | ✓ |
-| `/dashboard` | ✓ profile | ✓ profile |
-| `/settings` | ✓ (SSO panel hidden) | ✓ + SSO configuration panel |
+| Page         | CE                        | EE                                     |
+| ------------ | ------------------------- | -------------------------------------- |
+| `/` Home     | ✓                         | ✓                                      |
+| `/login`     | ✓                         | ✓                                      |
+| `/register`  | ✓                         | ✓                                      |
+| `/dashboard` | ✓ profile                 | ✓ profile                              |
+| `/settings`  | ✓ (SSO panel hidden)      | ✓ + SSO configuration panel            |
 | `/audit-log` | redirects to `/dashboard` | ✓ `<AuditLogPage />` from EE submodule |
-| `/rbac` | redirects to `/dashboard` | ✓ `<RbacManager />` from EE submodule |
-| `/billing` | redirects to `/dashboard` | ✓ `<BillingPage />` from EE submodule |
+| `/rbac`      | redirects to `/dashboard` | ✓ `<RbacManager />` from EE submodule  |
+| `/billing`   | redirects to `/dashboard` | ✓ `<BillingPage />` from EE submodule  |
 
 ### Navigation bar
 
@@ -261,6 +261,7 @@ The edition badge next to the app name changes colour — grey `CE` or purple `E
 The navbar is hidden on `/login` and `/register`.
 
 Key files:
+
 - `client/src/components/Navbar.tsx` — link lists, edition badge, logout button
 - `client/src/components/NavbarWrapper.tsx` — reads the current pathname and
   suppresses the navbar on auth pages; imported by `app/layout.tsx`
@@ -332,12 +333,12 @@ have no visible entry point to the page.
 
 ### What CE users see vs EE users
 
-| Layer | CE | EE |
-|-------|----|----|
-| API route | 404 (not registered) | Real response |
-| Nav link | Not rendered | Visible |
-| Page URL (direct access) | Redirect to `/dashboard` | Renders component |
-| Component source in bundle | `() => null` stub | Real implementation |
+| Layer                      | CE                       | EE                  |
+| -------------------------- | ------------------------ | ------------------- |
+| API route                  | 404 (not registered)     | Real response       |
+| Nav link                   | Not rendered             | Visible             |
+| Page URL (direct access)   | Redirect to `/dashboard` | Renders component   |
+| Component source in bundle | `() => null` stub        | Real implementation |
 
 ### EE components importing CE code
 
@@ -346,9 +347,9 @@ via relative imports — they are mounted one level inside `src/`:
 
 ```typescript
 // open-aicser-ee-client/your-feature/YourFeature.tsx
-import apiClient from '../../lib/axios';           // CE axios instance
-import { Button } from '../../components/ui/button'; // CE component
-import { useAuthStore } from '../../store/auth.store'; // CE zustand store
+import apiClient from "../../lib/axios"; // CE axios instance
+import { Button } from "../../components/ui/button"; // CE component
+import { useAuthStore } from "../../store/auth.store"; // CE zustand store
 ```
 
 EE repos **must not** create their own copies of `apiClient`, zustand stores, or
@@ -433,12 +434,14 @@ The fastest way to get everything running together. Requires Docker Desktop or
 Docker Engine with the Compose plugin.
 
 **CE:**
+
 ```bash
 cd deploy
 docker compose -f docker-compose.dev.yml up
 ```
 
 **EE** (requires EE submodule checked out):
+
 ```bash
 cd deploy
 EDITION=EE docker compose -f docker-compose.dev.yml up
@@ -457,6 +460,7 @@ runs start in seconds. Source code is mounted as a volume so changes hot-reload
 without restarting containers.
 
 **Useful commands:**
+
 ```bash
 # Rebuild after changing requirements.txt or package.json
 docker compose -f docker-compose.dev.yml up --build
@@ -515,30 +519,62 @@ Client starts at `http://localhost:3000`.
 4. The `EDITION` badge shows `CE`
 5. No SSO / Audit Log / RBAC panels are visible — this is correct
 
+### EE development workflow
+
+When implementing or editing EE features, **edit directly inside the submodule
+paths** (`server/app/ee/` and `client/src/ee/`). These directories are git repos
+checked out inside the CE repo — committing from them pushes directly to the
+private EE repos on GitHub.
+
+```bash
+# 1. Checkout EE submodules (one-time, requires EE access)
+git submodule update --init --recursive
+
+# 2. Edit files in the submodule path
+vim client/src/ee/audit-log/AuditLogPage.tsx
+
+# 3. Commit and push from inside the submodule
+cd client/src/ee
+git add audit-log/AuditLogPage.tsx
+git commit -m "feat: improve audit log filtering"
+git push                          # → pushes to open-aicser-ee-client on GitHub
+
+# 4. Update the submodule pointer in the CE repo
+cd ../../..                       # back to open-aicser root
+git add client/src/ee
+git commit -m "chore: bump EE client submodule"
+git push
+```
+
+You do **not** need to separately edit the standalone `open-aicser-ee-client/`
+or `open-aicser-ee-server/` directories — they are just other local checkouts of
+the same remote repos. Always commit from the submodule path so the CE repo's
+pointer stays in sync.
+
 ---
 
 ## 8. Environment Variables
 
 ### `server/.env`
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `EDITION` | no | `CE` | Set to `EE` to activate EE features |
-| `DATABASE_URL` | no | `sqlite:///./open_aicser.db` | Any SQLAlchemy-compatible URL |
-| `SECRET_KEY` | **yes** | — | JWT signing secret. Generate with `python -c "import secrets; print(secrets.token_hex(32))"` |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | no | `60` | JWT lifetime |
+| Variable                      | Required | Default                      | Description                                                                                  |
+| ----------------------------- | -------- | ---------------------------- | -------------------------------------------------------------------------------------------- |
+| `EDITION`                     | no       | `CE`                         | Set to `EE` to activate EE features                                                          |
+| `DATABASE_URL`                | no       | `sqlite:///./open_aicser.db` | Any SQLAlchemy-compatible URL                                                                |
+| `SECRET_KEY`                  | **yes**  | —                            | JWT signing secret. Generate with `python -c "import secrets; print(secrets.token_hex(32))"` |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | no       | `60`                         | JWT lifetime                                                                                 |
 
 ### `client/.env.local`
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `NEXT_PUBLIC_EDITION` | no | `CE` | Controls which EE UI panels render |
-| `NEXT_PUBLIC_API_URL` | no | `http://localhost:8000` | Backend API base URL |
+| Variable              | Required | Default                 | Description                        |
+| --------------------- | -------- | ----------------------- | ---------------------------------- |
+| `NEXT_PUBLIC_EDITION` | no       | `CE`                    | Controls which EE UI panels render |
+| `NEXT_PUBLIC_API_URL` | no       | `http://localhost:8000` | Backend API base URL               |
 
 ### Root `.env` (CI / submodule access)
 
-| Variable | Where used | Description |
-|----------|------------|-------------|
+| Variable             | Where used            | Description                           |
+| -------------------- | --------------------- | ------------------------------------- |
 | `EE_SUBMODULE_TOKEN` | GitHub Actions secret | PAT with read access to both EE repos |
 
 ---
@@ -590,11 +626,12 @@ CE repo via relative path. Do **not** create a new axios instance or zustand sto
 
 ```typescript
 // open-aicser-ee-client/widgets/widgets.service.ts
-import apiClient from '../../lib/axios';     // CE axios — do not duplicate
+import apiClient from "../../lib/axios"; // CE axios — do not duplicate
 
 export const widgetsService = {
-  list: () => apiClient.get('/widgets/').then(r => r.data),
-  create: (data: unknown) => apiClient.post('/widgets/', data).then(r => r.data),
+  list: () => apiClient.get("/widgets/").then((r) => r.data),
+  create: (data: unknown) =>
+    apiClient.post("/widgets/", data).then((r) => r.data),
 };
 ```
 
@@ -611,7 +648,7 @@ Export it from the submodule's index:
 
 ```typescript
 // open-aicser-ee-client/index.ts
-export { WidgetsPage } from './widgets/WidgetsPage';
+export { WidgetsPage } from "./widgets/WidgetsPage";
 ```
 
 **2. Add a null stub to `client/src/ee-fallback.ts`** (CE repo):
@@ -650,12 +687,12 @@ Then add the link to the `EE_LINKS` array in `client/src/components/Navbar.tsx`:
 
 ```typescript
 const EE_LINKS = [
-  { href: '/dashboard',  label: 'Dashboard' },
-  { href: '/audit-log',  label: 'Audit Log' },
-  { href: '/rbac',       label: 'Roles & Permissions' },
-  { href: '/billing',    label: 'Billing' },
-  { href: '/widgets',    label: 'Widgets' },   // ← new
-  { href: '/settings',   label: 'Settings' },
+  { href: "/dashboard", label: "Dashboard" },
+  { href: "/audit-log", label: "Audit Log" },
+  { href: "/rbac", label: "Roles & Permissions" },
+  { href: "/billing", label: "Billing" },
+  { href: "/widgets", label: "Widgets" }, // ← new
+  { href: "/settings", label: "Settings" },
 ];
 ```
 
